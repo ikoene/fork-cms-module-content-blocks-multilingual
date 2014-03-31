@@ -14,7 +14,7 @@
  * @author Tijs Verkoyen <tijs@sumocoders.be>
  * @author Dieter Vanden Eynde <dieter.vandeneynde@netlash.com>
  * @author Matthias Mullie <forkcms@mullie.eu>
- * @author Koen Vinken <twitter.com/ikoene> (multi language tweak)
+ * @author Koen Vinken <twitter.com/ikoene>
  */
 class BackendContentBlocksEdit extends BackendBaseActionEdit
 {
@@ -100,7 +100,7 @@ class BackendContentBlocksEdit extends BackendBaseActionEdit
 	private function loadRevisions()
 	{
 		// create datagrid
-		$this->dgRevisions = new BackendDataGridDB(BackendContentBlocksModel::QRY_BROWSE_REVISIONS, array('archived', $this->record['id']));
+		$this->dgRevisions = new BackendDataGridDB(BackendContentBlocksModel::QRY_BROWSE_REVISIONS, array('archived', $this->record['id'], $this->record['language']));
 
 		// hide columns
 		$this->dgRevisions->setColumnsHidden(array('id', 'revision_id'));
@@ -135,6 +135,7 @@ class BackendContentBlocksEdit extends BackendBaseActionEdit
 
 		$this->tpl->assign('id', $this->record['id']);
 		$this->tpl->assign('title', $this->record['title']);
+		$this->tpl->assign('lang', $this->record['language']);
 		$this->tpl->assign('revision_id', $this->record['revision_id']);
 
 		// assign revisions-datagrid
@@ -169,9 +170,17 @@ class BackendContentBlocksEdit extends BackendBaseActionEdit
 				// grab languages settings
 				$activeLanguages = (array) BackendModel::getModuleSetting('core', 'active_languages');
 
-				// update all languages
+				// update content block for every languages
 				foreach ($activeLanguages as $language) {
-					$item['language'] = $language;					
+
+					// get extra id for language
+					$extra_id = BackendContentBlocksModel::getExtraIdForLanguage($item['id'], $language);
+
+					// customize item for language
+					$item['language'] = $language;
+					$item['extra_id'] = $extra_id;
+
+					// update
 					BackendContentBlocksModel::update($item , $language);
 				}
 

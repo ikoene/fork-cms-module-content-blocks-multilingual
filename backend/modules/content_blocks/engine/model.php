@@ -17,6 +17,7 @@ use Symfony\Component\Finder\Finder;
  * @author Matthias Mullie <forkcms@mullie.eu>
  * @author Dieter Vanden Eynde <dieter.vandeneynde@netlash.com>
  * @author Jeroen Desloovere <jeroen@siesqo.be>
+ * @author Koen Vinken <twitter.com/ikoene>
  */
 class BackendContentBlocksModel
 {
@@ -28,7 +29,7 @@ class BackendContentBlocksModel
 	const QRY_BROWSE_REVISIONS =
 		'SELECT i.id, i.revision_id, i.title, UNIX_TIMESTAMP(i.edited_on) AS edited_on, i.user_id
 		 FROM content_blocks AS i
-		 WHERE i.status = ? AND i.id = ?
+		 WHERE i.status = ? AND i.id = ? AND i.language = ?
 		 ORDER BY i.edited_on DESC';
 
 	/**
@@ -114,7 +115,7 @@ class BackendContentBlocksModel
 	 *
 	 * @param int $id The id of the record to delete.
 	 */
-	public static function delete($id)
+	public static function delete($id, $extra_id, $language)
 	{
 		$id = (int) $id;
 		$db = BackendModel::getContainer()->get('database');
@@ -123,7 +124,7 @@ class BackendContentBlocksModel
 		$item = self::get($id);
 
 		// build extra
-		$extra = array('id' => $item['extra_id'],
+		$extra = array('id' => $extra_id,
 						'module' => 'content_blocks',
 						'type' => 'widget',
 						'action' => 'detail');
@@ -132,10 +133,10 @@ class BackendContentBlocksModel
 		$db->delete('modules_extras', 'id = ? AND module = ? AND type = ? AND action = ?', array($extra['id'], $extra['module'], $extra['type'], $extra['action']));
 
 		// update blocks with this item linked
-		$db->update('pages_blocks', array('extra_id' => null, 'html' => ''), 'extra_id = ?', array($item['extra_id']));
+		$db->update('pages_blocks', array('extra_id' => null, 'html' => ''), 'extra_id = ?', array($extra_id));
 
 		// delete all records
-		$db->delete('content_blocks', 'id = ? AND language = ?', array($id, BL::getWorkingLanguage()));
+		$db->delete('content_blocks', 'id = ? AND language = ?', array($id, $language));
 	}
 
 	/**
@@ -179,9 +180,9 @@ class BackendContentBlocksModel
 		return (array) BackendModel::getContainer()->get('database')->getRecord(
 			'SELECT i.*, UNIX_TIMESTAMP(i.created_on) AS created_on, UNIX_TIMESTAMP(i.edited_on) AS edited_on
 			 FROM content_blocks AS i
-			 WHERE i.id = ? AND i.status = ?
+			 WHERE i.id = ? AND i.status = ? AND i.language = ?
 			 LIMIT 1',
-			array((int) $id, 'active')
+			array((int) $id, 'active', BL::getWorkingLanguage())
 		);
 	}
 
@@ -210,7 +211,7 @@ class BackendContentBlocksModel
 		return (array) BackendModel::getContainer()->get('database')->getRecord(
 			'SELECT i.*, UNIX_TIMESTAMP(i.created_on) AS created_on, UNIX_TIMESTAMP(i.edited_on) AS edited_on
 			 FROM content_blocks AS i
-			 WHERE i.id = ? AND i.revision_id = ?
+			 WHERE i.id = ? AND i.revision_id = ? AND i.language = ?
 			 LIMIT 1',
 			array((int) $id, (int) $revisionId, BL::getWorkingLanguage())
 		);
@@ -250,7 +251,7 @@ class BackendContentBlocksModel
 	 * @param array $item The data to insert.
 	 * @return int
 	 */
-	public static function insert(array $item, $language)
+	public static function insert(array $item)
 	{
 		$db = BackendModel::getContainer()->get('database');
 
@@ -279,9 +280,6 @@ class BackendContentBlocksModel
 		$item['extra_id'] = $db->insert('modules_extras', $extra);
 		$extra['id'] = $item['extra_id'];
 
-		//add languages to item
-		$item['language'] = $language;
-
 		// insert and return the new revision id
 		$item['revision_id'] = $db->insert('content_blocks', $item);
 
@@ -289,7 +287,7 @@ class BackendContentBlocksModel
 		$extra['data'] = serialize(array(
 			'id' => $item['id'],
 			'extra_label' => $item['title'],
-			'language' => $language,
+			'language' => $item['language'],
 			'edit_url' => BackendModel::createURLForAction('edit', 'content_blocks', $language) . '&id=' . $item['id'])
 		);
 		$db->update(
@@ -300,6 +298,21 @@ class BackendContentBlocksModel
 		);
 
 		return $item['revision_id'];
+	}
+
+	/**
+	* Get extra_id for a specific language
+	*
+	* @param int $id The id of the content block.
+	* @param str $language
+	* @return int
+	**/
+	public static function getExtraIdForLanguage($id, $language)
+	{
+		return (int) BackendModel::getContainer()->get('database')->getVar(
+			'SELECT i.extra_id FROM content_blocks AS i WHERE i.language = ? AND i.id = ?',
+			array($language, (int) $id)
+		);
 	}
 
 	/**
@@ -331,17 +344,13 @@ class BackendContentBlocksModel
 		$db->update('modules_extras', $extra, 'id = ? AND module = ? AND type = ? AND action = ?', array($extra['id'], $extra['module'], $extra['type'], $extra['action']));
 
 		// archive all older versions
-		// $db->update('content_blocks', array('status' => 'archived'), 'id = ?', array($item['id']));
+		$db->update('content_blocks', array('status' => 'archived'), 'id = ? AND language = ?', array($item['id'], $item['language']));
+
+		$item['language'] = $language;
 
 		// insert new version
-		// $item['revision_id'] = $db->insert('content_blocks', $item);
+		$item['revision_id'] = $db->insert('content_blocks', $item);
 
-		$db->update(
-			'content_blocks',
-			$item,
-			'id = ? AND language = ?',
-			array($item['id'], $language)
-		);
 
 		// how many revisions should we keep
 		$rowsToKeep = (int) BackendModel::getModuleSetting('content_blocks', 'max_num_revisions', 20);

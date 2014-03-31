@@ -13,7 +13,7 @@
  * @author Davy Hellemans <davy.hellemans@netlash.com>
  * @author Tijs Verkoyen <tijs@sumocoders.be>
  * @author Matthias Mullie <forkcms@mullie.eu>
- * @author Koen Vinken <twitter.com/ikoene> (multi language tweak)
+ * @author Koen Vinken <twitter.com/ikoene>
  */
 class BackendContentBlocksAdd extends BackendBaseActionAdd
 {
@@ -80,12 +80,16 @@ class BackendContentBlocksAdd extends BackendBaseActionAdd
 				$item['created_on'] = BackendModel::getUTCDate();
 				$item['edited_on'] = BackendModel::getUTCDate();
 
+				// insert the item
+				//$item['revision_id'] = BackendContentBlocksModel::insert($item, BL::getWorkingLanguage());
+
 				// grab languages settings
 				$activeLanguages = (array) BackendModel::getModuleSetting('core', 'active_languages');
 
 				// insert all active languages
 				foreach ($activeLanguages as $language) {
-					BackendContentBlocksModel::insert($item, $language);
+					$item['language'] = $language;
+					BackendContentBlocksModel::insert($item);
 				}
 
 				BackendModel::triggerEvent($this->getModule(), 'after_add', array('item' => $item));
